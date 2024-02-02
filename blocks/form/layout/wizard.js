@@ -9,12 +9,12 @@ export class WizardLayout {
   }
 
   // eslint-disable-next-line class-methods-use-this
-  getSteps(form) {
-    return [...form.children].filter((step) => step.tagName.toLowerCase() === 'fieldset');
+  getSteps(panel) {
+    return [...panel.children].filter((step) => step.tagName.toLowerCase() === 'fieldset');
   }
 
-  assignIndexToSteps(form) {
-    const steps = this.getSteps(form);
+  assignIndexToSteps(panel) {
+    const steps = this.getSteps(panel);
     steps.forEach((step, index) => {
       step.dataset.index = index;
       step.style.setProperty('--wizard-step-index', index);
@@ -40,7 +40,7 @@ export class WizardLayout {
   validateContainer(container) {
     const fieldElements = [...container.querySelectorAll(this.inputFields)];
     const isValid = fieldElements.reduce((valid, fieldElement) => {
-      const isFieldValid = fieldElement.offsetParent !== null ? fieldElement.checkValidity() : true;
+      const isFieldValid = fieldElement.checkValidity();
       return valid && isFieldValid;
     }, true);
 
@@ -50,8 +50,8 @@ export class WizardLayout {
     return isValid;
   }
 
-  navigate(form, forward = true) {
-    const current = form.querySelector('.current-wizard-step');
+  navigate(panel, forward = true) {
+    const current = panel.querySelector('.current-wizard-step');
 
     let valid = true;
     if (forward) {
@@ -69,48 +69,48 @@ export class WizardLayout {
         },
         bubbles: false,
       });
-      form.dispatchEvent(event);
+      panel.dispatchEvent(event);
     }
   }
 
-  addButton(wrapper, form, buttonDef, forward = true) {
+  addButton(wrapper, panel, buttonDef, forward = true) {
     const button = createButton(buttonDef);
-    button.classList.add(buttonDef.Id);
-    button.addEventListener('click', () => this.navigate(form, forward));
+    button.classList.add(buttonDef.id);
+    button.addEventListener('click', () => this.navigate(panel, forward));
     wrapper.append(button);
   }
 
-  applyLayout(formDef, form) {
+  applyLayout(panel) {
     const wrapper = document.createElement('div');
     wrapper.className = 'form-wizard-button-wrapper';
     if (this.includePrevBtn) {
-      this.addButton(wrapper, form, {
-        Label: 'BACK', Type: 'button', Name: 'back', Id: 'form-wizard-button-prev',
+      this.addButton(wrapper, panel, {
+        label: { value: 'Back' }, fieldType: 'button', name: 'back', id: 'form-wizard-button-prev',
       }, false);
     }
 
     if (this.includeNextBtn) {
-      this.addButton(wrapper, form, {
-        Label: 'NEXT', Type: 'button', Name: 'next', Id: 'form-wizard-button-next',
+      this.addButton(wrapper, panel, {
+        label: { value: 'NEXT' }, fieldType: 'button', name: 'next', id: 'form-wizard-button-next',
       });
     }
 
-    const submitBtn = form.querySelector('.form-submit-wrapper');
+    const submitBtn = panel.querySelector('.form-submit-wrapper');
     if (submitBtn) {
       wrapper.append(submitBtn);
     }
-    this.assignIndexToSteps(form);
-    form.append(wrapper);
-    form.children[0]?.classList.add('current-wizard-step');
+    this.assignIndexToSteps(panel);
+    panel.append(wrapper);
+    panel.querySelector('fieldset')?.classList.add('current-wizard-step');
+    panel.classList.add('wizard');
+    panel.classList.add('left');
   }
 }
 
 const layout = new WizardLayout();
 
-export default function wizardLayout(formDef, form, block) {
-  if (block.matches('.wizard')) {
-    layout.applyLayout(formDef, form);
-  }
+export default function wizardLayout(panel) {
+  layout.applyLayout(panel);
 }
 
 export const navigate = layout.navigate.bind(layout);

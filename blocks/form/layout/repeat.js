@@ -1,12 +1,4 @@
-const getId = (function getId() {
-  const ids = {};
-  return (name) => {
-    ids[name] = ids[name] || 0;
-    const idSuffix = ids[name] ? `-${ids[name]}` : '';
-    ids[name] += 1;
-    return `${name}${idSuffix}`;
-  };
-}());
+import { getId } from '../util.js';
 
 function update(fieldset, index, labelTemplate) {
   const legend = fieldset.querySelector(':scope>.field-label').firstChild;
@@ -84,7 +76,7 @@ const add = (wrapper, form) => (e) => {
   form.dispatchEvent(event);
 };
 
-export default function transferRepeatableDOM(formDef, form) {
+export default function transferRepeatableDOM(form) {
   form.querySelectorAll('[data-repeatable="true"]').forEach((el) => {
     const div = document.createElement('div');
     div.setAttribute('data-min', el.dataset.min);
