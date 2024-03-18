@@ -6,21 +6,27 @@
  * @return {string}
  */
 function getFullName(firstname, lastname) {
-  // eslint-disable-next-line no-param-reassign
-  firstname = (firstname == null) ? '' : firstname;
-  // eslint-disable-next-line no-param-reassign
-  lastname = (lastname == null) ? '' : lastname;
-  return firstname.concat(' ').concat(lastname);
+  return `${firstname} ${lastname}`?.trim();
 }
 
 /**
- * Get Placeholder Value
- * @name getPlaceholderValue Puts placeholder value
- * @return {string}
+ * Calculate the number of days between two dates.
+ * @param {*} endDate
+ * @param {*} startDate
+ * @returns returns the number of days between two dates
  */
-function getPlaceholderValue() {
-  return 'this will have fullname';
+function days(endDate, startDate) {
+  const start = typeof startDate === 'string' ? new Date(startDate) : startDate;
+  const end = typeof endDate === 'string' ? new Date(endDate) : endDate;
+
+  // return zero if dates are valid
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+    return 0;
+  }
+
+  const diffInMs = Math.abs(end.getTime() - start.getTime());
+  return Math.floor(diffInMs / (1000 * 60 * 60 * 24));
 }
 
 // eslint-disable-next-line import/prefer-default-export
-export { getFullName, getPlaceholderValue };
+export { getFullName, days };

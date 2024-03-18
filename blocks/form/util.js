@@ -28,9 +28,15 @@ function toClassName(name) {
     : '';
 }
 
+const clear = Symbol('clear');
+
 export const getId = (function getId() {
-  const ids = {};
+  let ids = {};
   return (name) => {
+    if (name === clear) {
+      ids = {};
+      return '';
+    }
     const slug = toClassName(name);
     ids[slug] = ids[slug] || 0;
     const idSuffix = ids[slug] ? `-${ids[slug]}` : '';
@@ -38,6 +44,14 @@ export const getId = (function getId() {
     return `${slug}${idSuffix}`;
   };
 }());
+
+/**
+ * Resets the ids for the getId function
+ * @returns {void}
+ */
+export function resetIds() {
+  getId(clear);
+}
 
 export function createLabel(fd, tagName = 'label') {
   if (fd.label && fd.label.value) {
@@ -66,9 +80,9 @@ export function getHTMLRenderType(fd) {
 
 export function createFieldWrapper(fd, tagName = 'div', labelFn = createLabel) {
   const fieldWrapper = document.createElement(tagName);
-  const nameStyle = fd.name ? ` form-${toClassName(fd.name)}` : '';
+  const nameStyle = fd.name ? ` field-${toClassName(fd.name)}` : '';
   const renderType = getHTMLRenderType(fd);
-  const fieldId = `form-${renderType}-wrapper${nameStyle}`;
+  const fieldId = `${renderType}-wrapper${nameStyle}`;
   fieldWrapper.className = fieldId;
   if (fd.visible === false) {
     fieldWrapper.dataset.visible = fd.visible;
@@ -84,29 +98,36 @@ export function createFieldWrapper(fd, tagName = 'div', labelFn = createLabel) {
 export function createButton(fd) {
   const wrapper = createFieldWrapper(fd);
   if (fd.buttonType) {
-    wrapper.classList.add(`form-${fd?.buttonType}-wrapper`);
+    wrapper.classList.add(`${fd?.buttonType}-wrapper`);
   }
   const button = document.createElement('button');
-  button.textContent = fd?.label?.value || '';
+  button.textContent = fd?.label?.visible === false ? '' : fd?.label?.value;
   button.type = fd.buttonType || 'button';
   button.classList.add('button');
   button.id = fd.id;
   button.name = fd.name;
+  if (fd?.label?.visible === false) {
+    button.setAttribute('aria-label', fd?.label?.value || '');
+  }
+  if (fd.enabled === false) {
+    button.disabled = true;
+    button.setAttribute('disabled', '');
+  }
   wrapper.replaceChildren(button);
   return wrapper;
 }
 
 // create a function to measure performance of another function
-export function perf(fn) {
-  return (...args) => {
-    const start = performance.now();
-    const result = fn(...args);
-    const end = performance.now();
-    // eslint-disable-next-line no-console
-    console.log(`${fn.name} took ${end - start} milliseconds.`);
-    return result;
-  };
-}
+// export function perf(fn) {
+//   return (...args) => {
+//     const start = performance.now();
+//     const result = fn(...args);
+//     const end = performance.now();
+//     // eslint-disable-next-line no-console
+//     console.log(`${fn.name} took ${end - start} milliseconds.`);
+//     return result;
+//   };
+// }
 
 function getFieldContainer(fieldElement) {
   const wrapper = fieldElement?.closest('.field-wrapper');
@@ -134,15 +155,19 @@ export function updateOrCreateInvalidMsg(fieldElement, msg) {
     container.append(element);
   }
   if (msg) {
-    element.classList.add('field-invalid');
+    container.classList.add('field-invalid');
     element.textContent = msg;
   } else if (container.dataset.description) {
-    element.classList.remove('field-invalid');
+    container.classList.remove('field-invalid');
     element.innerHTML = container.dataset.description;
   } else if (element) {
     element.remove();
   }
   return element;
+}
+
+function removeInvalidMsg(fieldElement) {
+  return updateOrCreateInvalidMsg(fieldElement, '');
 }
 
 export const validityKeyMsgMap = {
@@ -163,6 +188,7 @@ export function getCheckboxGroupValue(name, htmlForm) {
   });
   return val;
 }
+
 function updateRequiredCheckboxGroup(name, htmlForm) {
   const checkboxGroup = htmlForm.querySelectorAll(`input[name="${name}"]`) || [];
   const value = getCheckboxGroupValue(name, htmlForm);
@@ -182,16 +208,15 @@ export function checkValidation(fieldElement) {
   if (isCheckboxGroup && required === 'true') {
     updateRequiredCheckboxGroup(fieldElement.name, fieldElement.form);
   }
-  let hasError = false;
-  Object.keys(validityKeyMsgMap).forEach((key) => {
-    if (fieldElement.validity[key]) {
-      const message = (wrapper.dataset[validityKeyMsgMap[key]] || fieldElement.validationMessage);
-      updateOrCreateInvalidMsg(fieldElement, message);
-      hasError = true;
-    }
-  });
-
-  if (!hasError && fieldElement.type !== 'file') {
-    updateOrCreateInvalidMsg(fieldElement, '');
+  if (fieldElement.validity.valid && fieldElement.type !== 'file') {
+    removeInvalidMsg(fieldElement);
+    return;
   }
+
+  const [invalidProperty] = Object.keys(validityKeyMsgMap)
+    .filter((state) => fieldElement.validity[state]);
+
+  const message = wrapper.dataset[validityKeyMsgMap[invalidProperty]]
+  || fieldElement.validationMessage;
+  updateOrCreateInvalidMsg(fieldElement, message);
 }

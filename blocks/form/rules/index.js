@@ -1,7 +1,10 @@
-import { submitSuccess, submitFailure, handleSubmit } from '../submit.js';
+import { submitSuccess, submitFailure } from '../submit.js';
 import {
   createHelpText, createLabel, updateOrCreateInvalidMsg, getCheckboxGroupValue,
 } from '../util.js';
+import registerCustomFunctions from './functionRegistration.js';
+import { externalize } from './functions.js';
+import initializeRuleEngineWorker from './worker.js';
 
 function disableElement(el, value) {
   el.toggleAttribute('disabled', value === true);
@@ -24,7 +27,7 @@ async function fieldChanged(payload, form, generateFormRendition) {
     const {
       id, fieldType, readOnly, type, displayValue, displayFormat,
     } = fieldModel;
-    const { propertyName, currentValue } = change;
+    const { propertyName, currentValue, prevValue } = change;
     const field = form.querySelector(`#${id}`);
     if (!field) {
       return;
@@ -45,8 +48,6 @@ async function fieldChanged(payload, form, generateFormRendition) {
         break;
       case 'value':
         if (['number', 'date'].includes(field.type) && displayFormat) {
-          field.type = 'text';
-          field.value = displayValue;
           field.setAttribute('edit-value', currentValue);
           field.setAttribute('display-value', displayValue);
         } else if (fieldType === 'radio-group' || fieldType === 'checkbox-group') {
@@ -128,7 +129,12 @@ async function fieldChanged(payload, form, generateFormRendition) {
         }
         break;
       case 'items':
-        generateFormRendition({ items: [currentValue] }, field);
+        if (currentValue === null) {
+          const removeId = prevValue.id;
+          field?.querySelector(`#${removeId}`)?.remove();
+        } else {
+          generateFormRendition({ items: [currentValue] }, field?.querySelector('.repeat-wrapper'));
+        }
         break;
       default:
         break;
@@ -153,19 +159,21 @@ function applyRuleEngine(htmlForm, form, captcha) {
     const {
       id, value, name, checked,
     } = field;
-    if ((field.type === 'checkbox' && field.dataset.fieldType === 'checkbox-group')
-      || (field.type === 'radio' && field.dataset.fieldType === 'radio-group')) {
+    if ((field.type === 'checkbox' && field.dataset.fieldType === 'checkbox-group')) {
       const val = getCheckboxGroupValue(name, htmlForm);
       const el = form.getElement(name);
       el.value = val;
+    } else if ((field.type === 'radio' && field.dataset.fieldType === 'radio-group')) {
+      const el = form.getElement(name);
+      el.value = value;
     } else if (field.type === 'checkbox') {
       form.getElement(id).value = checked ? value : field.dataset.uncheckedValue;
     } else if (field.type === 'file') {
-      form.getElement(id).value = Array.from(field.files);
+      form.getElement(id).value = Array.from(e?.detail?.files || field.files);
     } else {
       form.getElement(id).value = value;
     }
-    console.log(JSON.stringify(form.exportData(), null, 2));
+    // console.log(JSON.stringify(form.exportData(), null, 2));
   });
 
   htmlForm.addEventListener('click', async (e) => {
@@ -182,20 +190,10 @@ function applyRuleEngine(htmlForm, form, captcha) {
   });
 }
 
-export default async function loadRuleEngine(formDef, htmlForm, captcha, genFormRendition, data) {
+export async function loadRuleEngine(formDef, htmlForm, captcha, genFormRendition, data) {
   const ruleEngine = await import('./model/afb-runtime.js');
-  const form = ruleEngine.restoreFormInstance(formDef);
-  if (data && Object.keys(data).length > 0) {
-    form.importData(data);
-  }
-
+  const form = ruleEngine.restoreFormInstance(formDef, data);
   window.myForm = form;
-  let submitElement;
-  htmlForm.addEventListener('submit', (e) => {
-    e.preventDefault();
-    submitElement = e.submitter;
-    handleSubmit(e, htmlForm);
-  });
 
   form.subscribe((e) => {
     handleRuleEngineEvent(e, htmlForm, genFormRendition);
@@ -203,12 +201,38 @@ export default async function loadRuleEngine(formDef, htmlForm, captcha, genForm
 
   form.subscribe((e) => {
     handleRuleEngineEvent(e, htmlForm);
-    submitElement.removeAttribute('disabled');
   }, 'submitSuccess');
 
   form.subscribe((e) => {
     handleRuleEngineEvent(e, htmlForm);
-    submitElement.removeAttribute('disabled');
   }, 'submitFailure');
+
+  form.subscribe((e) => {
+    handleRuleEngineEvent(e, htmlForm);
+  }, 'submitError');
   applyRuleEngine(htmlForm, form, captcha);
+}
+
+async function fetchData({ id }) {
+  try {
+    const { search = '' } = window.location;
+    const url = externalize(`/adobe/forms/af/data/${id}${search}`);
+    const response = await fetch(url);
+    const json = await response.json();
+    const { data } = json;
+    const { data: { afData: { afBoundData = {} } = {} } = {} } = json;
+    return Object.keys(afBoundData).length > 0 ? afBoundData : (data || json);
+  } catch (ex) {
+    return null;
+  }
+}
+
+export async function initAdaptiveForm(formDef, createForm) {
+  const data = await fetchData(formDef);
+  await registerCustomFunctions();
+  const form = await initializeRuleEngineWorker({
+    ...formDef,
+    data,
+  }, createForm);
+  return form;
 }
